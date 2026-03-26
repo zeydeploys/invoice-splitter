@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fatura Ayıklayıcı</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" crossorigin="anonymous"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f0f4f8;
+    color: #1a202c;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+    color: white;
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header svg { flex-shrink: 0; }
+  header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.3px; }
+  header p { font-size: 0.85rem; color: #a0aec0; margin-top: 2px; }
+
+  .container { max-width: 900px; margin: 36px auto; padding: 0 20px; }
+
+  .card {
+    background: white;
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05);
+  }
+  .card h2 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #718096;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2 span { font-size: 1.1rem; }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed #cbd5e0;
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f7fafc;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: #4299e1;
+    background: #ebf8ff;
+  }
+  .drop-zone svg { margin: 0 auto 12px; display: block; color: #a0aec0; }
+  .drop-zone.has-file { border-color: #48bb78; background: #f0fff4; }
+  .drop-zone.has-file svg { color: #48bb78; }
+  .drop-zone p { color: #718096; font-size: 0.95rem; }
+  .drop-zone .filename { font-weight: 600; color: #2d3748; font-size: 1rem; margin-top: 4px; }
+  .drop-zone .pagecount { color: #48bb78; font-size: 0.85rem; margin-top: 2px; }
+  #fileInput { display: none; }
+
+  /* Textarea */
+  textarea {
+    width: 100%;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 0.95rem;
+    font-family: 'Courier New', monospace;
+    resize: vertical;
+    min-height: 120px;
+    transition: border-color 0.2s;
+    background: #fafafa;
+    color: #2d3748;
+  }
+  textarea:focus { outline: none; border-color: #4299e1; background: white; }
+  .hint { font-size: 0.82rem; color: #a0aec0; margin-top: 8px; }
+
+  /* Mode select */
+  .mode-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 10px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: #718096;
+    transition: all 0.18s;
+    font-weight: 500;
+  }
+  .mode-btn.active {
+    border-color: #4299e1;
+    background: #ebf8ff;
+    color: #2b6cb0;
+  }
+
+  /* Pattern input */
+  .pattern-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+  .pattern-row input {
+    flex: 1;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    font-family: monospace;
+    background: #fafafa;
+  }
+  .pattern-row input:focus { outline: none; border-color: #4299e1; background: white; }
+  label.small { font-size: 0.85rem; color: #4a5568; font-weight: 500; }
+
+  /* Scan button */
+  #scanBtn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #4299e1, #3182ce);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  #scanBtn:hover { opacity: 0.92; }
+  #scanBtn:active { transform: scale(0.99); }
+  #scanBtn:disabled { background: #a0aec0; cursor: not-allowed; }
+
+  /* Progress */
+  .progress-wrap { margin-top: 14px; display: none; }
+  .progress-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4299e1, #63b3ed);
+    border-radius: 99px;
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .progress-text { font-size: 0.82rem; color: #718096; margin-top: 6px; text-align: center; }
+
+  /* Results */
+  #results { display: none; }
+  .result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .badge-green { background: #c6f6d5; color: #276749; }
+  .badge-yellow { background: #fefcbf; color: #744210; }
+  .badge-red { background: #fed7d7; color: #9b2c2c; }
+
+  .result-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .result-table th {
+    background: #f7fafc;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #718096;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .result-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle;
+  }
+  .result-table tr:last-child td { border-bottom: none; }
+  .result-table tr:hover td { background: #f7fafc; }
+  .inv-num { font-family: monospace; font-weight: 600; color: #2d3748; }
+  .pages-list { color: #4a5568; font-size: 0.85rem; }
+  .not-found { color: #fc8181; font-style: italic; font-size: 0.85rem; }
+
+  /* Download area */
+  .download-section { margin-top: 20px; }
+  .dl-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .dl-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .dl-btn-primary { background: #48bb78; color: white; }
+  .dl-btn-primary:hover { background: #38a169; }
+  .dl-btn-secondary { background: #edf2f7; color: #4a5568; }
+  .dl-btn-secondary:hover { background: #e2e8f0; }
+  .dl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    margin-top: 12px;
+  }
+  .alert-info { background: #ebf8ff; color: #2c5282; border: 1px solid #bee3f8; }
+  .alert-warn { background: #fffbeb; color: #744210; border: 1px solid #fbd38d; }
+
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .prefix-chip {
+    padding: 4px 12px; border-radius: 99px; border: 1.5px solid #e2e8f0;
+    background: white; cursor: pointer; font-size: 0.82rem; font-family: monospace;
+    color: #4a5568; transition: all 0.15s;
+  }
+  .prefix-chip:hover { border-color: #4299e1; background: #ebf8ff; color: #2b6cb0; }
+  .prefix-chip.active { border-color: #4299e1; background: #ebf8ff; color: #2b6cb0; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+    <rect width="36" height="36" rx="8" fill="rgba(255,255,255,0.15)"/>
+    <path d="M10 8h11l7 7v13a2 2 0 01-2 2H10a2 2 0 01-2-2V10a2 2 0 012-2z" stroke="white" stroke-width="1.5" fill="none"/>
+    <path d="M21 8v7h7" stroke="white" stroke-width="1.5" fill="none"/>
+    <line x1="13" y1="18" x2="23" y2="18" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="13" y1="22" x2="23" y2="22" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="13" y1="26" x2="19" y2="26" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <h1>Fatura Ayıklayıcı</h1>
+    <p>PDF'den fatura numaralarına göre sayfa çıkarın</p>
+  </div>
+</header>
+
+<div id="edgeWarning" style="display:none; background:#fffbeb; border-bottom:2px solid #f6e05e; padding:12px 32px; font-size:0.88rem; color:#744210;">
+  ⚠️ <strong>Microsoft Edge</strong> kullanıyorsunuz. "Tracking Prevention" özelliği kütüphanelerin yüklenmesini engelleyebilir.
+  Sorun yaşarsanız: <strong>Edge Ayarları → Gizlilik → Tracking Prevention → Kapalı</strong> yapın veya 
+  <strong>Google Chrome / Firefox</strong> kullanın.
+  <button onclick="document.getElementById('edgeWarning').style.display='none'" style="margin-left:12px; background:none; border:1px solid #d69e2e; border-radius:4px; padding:2px 8px; cursor:pointer; color:#744210;">Kapat</button>
+</div>
+
+<div class="container">
+
+  <!-- 1. PDF Yükle -->
+  <div class="card">
+    <h2><span>📄</span> PDF Dosyası</h2>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 12h12l8 8v16a2 2 0 01-2 2H14a2 2 0 01-2-2V14a2 2 0 012-2z"/>
+        <path d="M26 12v8h8"/>
+        <path d="M24 28v-8M20 24l4-4 4 4"/>
+      </svg>
+      <p>PDF dosyasını buraya sürükleyin veya <strong>tıklayın</strong></p>
+      <p style="font-size:0.8rem; color:#a0aec0; margin-top:6px;">Tüm işlem tarayıcınızda gerçekleşir, dosya hiçbir yere gönderilmez</p>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf">
+  </div>
+
+  <!-- 2. Fatura Numaraları -->
+  <div class="card">
+    <h2><span>🔍</span> Arama Ayarları</h2>
+
+    <label class="small">Arama Yöntemi</label>
+    <div class="mode-row" style="margin-top:8px;">
+      <button class="mode-btn active" id="modeList" onclick="setMode('list')">📋 Numara Listesi</button>
+      <button class="mode-btn" id="modePattern" onclick="setMode('pattern')">🔧 Regex / Örüntü</button>
+    </div>
+
+    <div id="listMode" style="margin-top:14px;">
+      <label class="small">Fatura Numaraları (her satıra bir tane)</label>
+      <textarea id="invoiceList" placeholder="FTR-2024-001&#10;FTR-2024-002&#10;INV-0045&#10;..." style="margin-top:8px;"></textarea>
+      <p class="hint">💡 Her satıra bir fatura numarası yazın. Büyük/küçük harf duyarsız arama yapılır.</p>
+    </div>
+
+    <div id="patternMode" style="display:none; margin-top:14px;">
+      <label class="small">Regex Örüntüsü</label>
+      <div class="pattern-row">
+        <span style="color:#718096; font-size:1.1rem;">/</span>
+        <input type="text" id="regexInput" placeholder="FTR-\d{4}-\d{3}" />
+        <span style="color:#718096; font-size:1.1rem;">/gi</span>
+      </div>
+      <p class="hint">💡 Örnek: <code>INV-\d+</code> → INV-001, INV-1234 gibi numaraları bulur. Bulunan her eşleşme ayrı bir fatura olarak işlenir.</p>
+    </div>
+
+    <div style="margin-top:16px;">
+      <label class="small">Her Fatura Kaç Sayfa?</label>
+      <div style="display:flex; gap:10px; margin-top:8px; align-items:center; flex-wrap:wrap;">
+        <select id="pageMode" onchange="togglePageMode()" style="border:1.5px solid #e2e8f0; border-radius:8px; padding:9px 12px; font-size:0.9rem; background:#fafafa;">
+          <option value="until_next">Bir sonraki faturaya kadar tüm sayfalar</option>
+          <option value="range">Fatura numarasından sonra N sayfa</option>
+          <option value="single">Fatura numarası bulunduğunda sadece o sayfa</option>
+        </select>
+        <div id="rangeInput" style="display:none; align-items:center; gap:6px;">
+          <input type="number" id="pageCount" value="2" min="1" max="50"
+            style="width:70px; border:1.5px solid #e2e8f0; border-radius:8px; padding:9px 12px; font-size:0.9rem; background:#fafafa;">
+          <span style="font-size:0.9rem; color:#718096;">sayfa</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="boundarySection" style="margin-top:14px; padding:14px; background:#f7fafc; border-radius:8px; border:1px solid #e2e8f0;">
+      <label class="small">📐 Fatura numaralarınız nasıl başlıyor?</label>
+      <p style="font-size:0.82rem; color:#718096; margin:6px 0 10px;">
+        PDF'deki <strong>tüm</strong> fatura numaralarının ortak başlangıcını yazın.<br>
+        Böylece listenizde olmayan faturalar da sayfa sınırı olarak tanınır ve not sayfası doğru faturaya eklenir.
+      </p>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;" id="prefixExamples">
+        <span style="font-size:0.8rem; color:#718096;">Örnekler:</span>
+        <button class="prefix-chip" onclick="setPrefix('FBI')">FBI…</button>
+        <button class="prefix-chip" onclick="setPrefix('INV')">INV…</button>
+        <button class="prefix-chip" onclick="setPrefix('FTR')">FTR…</button>
+        <button class="prefix-chip" onclick="setPrefix('FAT')">FAT…</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <span style="font-size:0.9rem; color:#718096; white-space:nowrap;">Fatura numaraları şununla başlar:</span>
+        <input type="text" id="boundaryPrefix" placeholder="örn: FBI veya INV-2024"
+          style="flex:1; border:1.5px solid #e2e8f0; border-radius:8px; padding:9px 12px; font-size:0.95rem; font-family:monospace; background:#fafafa;"
+          oninput="updateBoundaryRegex()" />
+      </div>
+      <input type="hidden" id="boundaryRegex" />
+      <p class="hint" id="boundaryHint" style="margin-top:8px;">💡 Boş bırakırsanız yalnızca aradığınız faturalar sınır sayılır.</p>
+    </div>
+  </div>
+
+  <!-- 3. Tara -->
+  <div class="card">
+    <button id="scanBtn" onclick="startScan()" disabled>
+      <div class="spinner" id="spinner"></div>
+      <span id="scanBtnText">Önce PDF yükleyin</span>
+    </button>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-text" id="progressText">Hazırlanıyor...</div>
+    </div>
+  </div>
+
+  <!-- 4. Sonuçlar -->
+  <div class="card" id="results">
+    <div class="result-header">
+      <h2 style="margin:0;"><span>✅</span> Sonuçlar</h2>
+      <div id="summaryBadges" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+    </div>
+    <div id="resultTableWrap"></div>
+    <div class="download-section">
+      <div class="dl-row">
+        <button class="dl-btn dl-btn-primary" id="downloadAll" onclick="downloadFiltered()">
+          ⬇️ Filtrelenmiş PDF İndir
+        </button>
+        <button class="dl-btn dl-btn-secondary" id="downloadSeparate" onclick="downloadSeparate()">
+          📦 Her Fatura Ayrı İndir
+        </button>
+      </div>
+      <div id="dlAlert"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Edge uyarısı
+  if (navigator.userAgent.includes('Edg/')) {
+    document.getElementById('edgeWarning').style.display = 'block';
+  }
+
+  // Edge Tracking Prevention için workerSrc'i CDN'den yükle,
+  // engellenirse fake worker kullan
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  } catch(e) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  }
+
+  let pdfDoc = null;
+  let pdfArrayBuffer = null; // orijinal ArrayBuffer saklanır
+  let scanResults = [];
+  let currentMode = 'list';
+
+  // ---- FILE UPLOAD ----
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') loadPDF(file);
+    else alert('Lütfen bir PDF dosyası yükleyin.');
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) loadPDF(fileInput.files[0]);
+  });
+
+  async function loadPDF(file) {
+    dropZone.innerHTML = `
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="24" cy="24" r="16" opacity="0.3"/>
+        <path d="M17 24l5 5 9-9" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="filename">⏳ Yükleniyor...</p>`;
+    dropZone.classList.add('has-file');
+
+    const arrayBuffer = await file.arrayBuffer();
+    pdfArrayBuffer = arrayBuffer; // orijinal saklıyoruz
+    // pdf.js'e kopya veriyoruz (transfer etmesin diye)
+    pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
+
+    dropZone.innerHTML = `
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="24" cy="24" r="16" opacity="0.3"/>
+        <path d="M17 24l5 5 9-9" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="filename">📄 ${file.name}</p>
+      <p class="pagecount">✓ ${pdfDoc.numPages} sayfa yüklendi</p>`;
+
+    document.getElementById('scanBtn').disabled = false;
+    document.getElementById('scanBtnText').textContent = 'PDF\'i Tara ve Faturaları Bul';
+  }
+
+  // ---- MODE ----
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('listMode').style.display = mode === 'list' ? 'block' : 'none';
+    document.getElementById('patternMode').style.display = mode === 'pattern' ? 'block' : 'none';
+    document.getElementById('modeList').classList.toggle('active', mode === 'list');
+    document.getElementById('modePattern').classList.toggle('active', mode === 'pattern');
+  }
+
+  function togglePageMode() {
+    const v = document.getElementById('pageMode').value;
+    document.getElementById('rangeInput').style.display = v === 'range' ? 'flex' : 'none';
+    document.getElementById('boundarySection').style.display = v === 'until_next' ? 'block' : 'none';
+  }
+  // Init on load
+  setTimeout(() => togglePageMode(), 0);
+
+  function setPrefix(prefix) {
+    document.getElementById('boundaryPrefix').value = prefix;
+    updateBoundaryRegex();
+    document.querySelectorAll('.prefix-chip').forEach(c => c.classList.remove('active'));
+    event.target.classList.add('active');
+  }
+
+  function updateBoundaryRegex() {
+    const prefix = document.getElementById('boundaryPrefix').value.trim();
+    // Escape special regex chars in prefix, then append \d+
+    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = escaped ? escaped + '\\d*' : '';
+    document.getElementById('boundaryRegex').value = regex;
+    const hint = document.getElementById('boundaryHint');
+    if (prefix) {
+      hint.textContent = '✓ "' + prefix + '" ile başlayan tüm fatura numaraları sınır olarak kullanılacak.';
+      hint.style.color = '#38a169';
+    } else {
+      hint.textContent = '💡 Boş bırakırsanız yalnızca aradığınız faturalar sınır sayılır.';
+      hint.style.color = '#a0aec0';
+    }
+  }
+
+  // ---- SCAN ----
+  async function startScan() {
+    if (!pdfDoc) return;
+
+    // Get search targets
+    let targets = [];
+    if (currentMode === 'list') {
+      targets = document.getElementById('invoiceList').value
+        .split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      if (targets.length === 0) { alert('Lütfen en az bir fatura numarası girin.'); return; }
+    } else {
+      const pat = document.getElementById('regexInput').value.trim();
+      if (!pat) { alert('Lütfen bir regex örüntüsü girin.'); return; }
+    }
+
+    const pageMode = document.getElementById('pageMode').value;
+    const pageCount = parseInt(document.getElementById('pageCount').value) || 1;
+
+    // UI
+    document.getElementById('scanBtn').disabled = true;
+    document.getElementById('spinner').style.display = 'block';
+    document.getElementById('scanBtnText').textContent = 'Taranıyor...';
+    const progressWrap = document.getElementById('progressWrap');
+    progressWrap.style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+
+    // Extract text from all pages
+    const pageTexts = [];
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      setProgress(i, pdfDoc.numPages, `Sayfa ${i}/${pdfDoc.numPages} okunuyor...`);
+      const page = await pdfDoc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map(item => item.str).join(' ');
+      pageTexts.push(text);
+    }
+
+    // Find pages for each invoice
+    scanResults = [];
+
+    if (currentMode === 'list') {
+      for (const inv of targets) {
+        const foundPages = [];
+        for (let i = 0; i < pageTexts.length; i++) {
+          if (pageTexts[i].toLowerCase().includes(inv.toLowerCase())) {
+            foundPages.push(i + 1);
+          }
+        }
+        scanResults.push({ id: inv, foundPages });
+      }
+    } else {
+      // Regex mode: find all matches across all pages
+      const pat = document.getElementById('regexInput').value.trim();
+      const regex = new RegExp(pat, 'gi');
+      const allMatches = new Set();
+      for (const text of pageTexts) {
+        for (const m of text.matchAll(new RegExp(pat, 'gi'))) {
+          allMatches.add(m[0]);
+        }
+      }
+      for (const inv of allMatches) {
+        const foundPages = [];
+        for (let i = 0; i < pageTexts.length; i++) {
+          if (new RegExp(pat, 'i').test(pageTexts[i]) && pageTexts[i].toLowerCase().includes(inv.toLowerCase())) {
+            foundPages.push(i + 1);
+          }
+        }
+        scanResults.push({ id: inv, foundPages });
+      }
+    }
+
+    // Determine which pages to include per invoice
+    // until_next için: boundary regex ile PDF'deki TÜM fatura başlangıç sayfalarını bul
+    let allInvoiceStartPages = [...new Set(scanResults.flatMap(r => r.foundPages))].sort((a,b) => a-b);
+    const bndPat = document.getElementById('boundaryRegex').value.trim();
+    if (pageMode === 'until_next' && bndPat) {
+      try {
+        const bndRegex = new RegExp(bndPat, 'gi');
+        for (let i = 0; i < pageTexts.length; i++) {
+          if (bndRegex.test(pageTexts[i])) {
+            allInvoiceStartPages.push(i + 1);
+          }
+          bndRegex.lastIndex = 0;
+        }
+        allInvoiceStartPages = [...new Set(allInvoiceStartPages)].sort((a,b) => a-b);
+      } catch(e) { /* geçersiz regex, yoksay */ }
+    }
+
+    for (const result of scanResults) {
+      if (result.foundPages.length === 0) {
+        result.outputPages = [];
+        continue;
+      }
+      let pages = new Set();
+      for (const fp of result.foundPages) {
+        if (pageMode === 'single') {
+          pages.add(fp);
+        } else if (pageMode === 'range') {
+          for (let p = fp; p < fp + pageCount && p <= pdfDoc.numPages; p++) pages.add(p);
+        } else if (pageMode === 'until_next') {
+          // fp'den sonraki ilk fatura başlangıç sayfasını bul (kendi sayfası hariç)
+          const nextStart = allInvoiceStartPages.find(p => p > fp) ?? (pdfDoc.numPages + 1);
+          for (let p = fp; p < nextStart && p <= pdfDoc.numPages; p++) pages.add(p);
+        }
+      }
+      result.outputPages = [...pages].sort((a, b) => a - b);
+    }
+
+    setProgress(pdfDoc.numPages, pdfDoc.numPages, 'Tamamlandı!');
+    setTimeout(() => { progressWrap.style.display = 'none'; }, 800);
+
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('scanBtn').disabled = false;
+    document.getElementById('scanBtnText').textContent = 'Tekrar Tara';
+
+    showResults();
+  }
+
+  function setProgress(current, total, text) {
+    const pct = Math.round((current / total) * 100);
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressText').textContent = text;
+  }
+
+  // ---- RESULTS ----
+  function showResults() {
+    const found = scanResults.filter(r => r.outputPages && r.outputPages.length > 0);
+    const notFound = scanResults.filter(r => !r.outputPages || r.outputPages.length === 0);
+
+    // Badges
+    const badges = document.getElementById('summaryBadges');
+    badges.innerHTML = `
+      <span class="badge badge-green">✓ ${found.length} bulundu</span>
+      ${notFound.length > 0 ? `<span class="badge badge-red">✗ ${notFound.length} bulunamadı</span>` : ''}
+      <span class="badge" style="background:#e2e8f0;color:#4a5568;">Toplam ${scanResults.length} fatura</span>`;
+
+    // Table
+    let html = `<table class="result-table">
+      <thead><tr>
+        <th>#</th>
+        <th>Fatura No</th>
+        <th>Bulunan Sayfalar</th>
+        <th>Çıkarılacak Sayfalar</th>
+        <th>Durum</th>
+      </tr></thead><tbody>`;
+
+    scanResults.forEach((r, i) => {
+      const ok = r.outputPages && r.outputPages.length > 0;
+      html += `<tr>
+        <td style="color:#a0aec0;">${i+1}</td>
+        <td><span class="inv-num">${escHtml(r.id)}</span></td>
+        <td class="pages-list">${ok ? r.foundPages.join(', ') : '<span class="not-found">-</span>'}</td>
+        <td class="pages-list">${ok ? r.outputPages.join(', ') : '<span class="not-found">-</span>'}</td>
+        <td>${ok ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">✗ Bulunamadı</span>'}</td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('resultTableWrap').innerHTML = html;
+
+    // Alert
+    const alertDiv = document.getElementById('dlAlert');
+    if (found.length === 0) {
+      alertDiv.innerHTML = '<div class="alert alert-warn">⚠️ Hiçbir fatura bulunamadı. Fatura numaralarını veya arama ayarlarını kontrol edin.</div>';
+      document.getElementById('downloadAll').disabled = true;
+      document.getElementById('downloadSeparate').disabled = true;
+    } else {
+      alertDiv.innerHTML = `<div class="alert alert-info">ℹ️ Toplam <strong>${[...new Set(found.flatMap(r => r.outputPages))].length}</strong> sayfa seçildi. PDF indirilmeye hazır.</div>`;
+      document.getElementById('downloadAll').disabled = false;
+      document.getElementById('downloadSeparate').disabled = false;
+    }
+
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ---- DOWNLOAD ----
+  function getPDFLib() {
+    if (window.PDFLib) return window.PDFLib;
+    if (typeof PDFLib !== 'undefined') return PDFLib;
+    throw new Error('pdf-lib kütüphanesi yüklenemedi. Lütfen internet bağlantınızı kontrol edin ve sayfayı yenileyin.');
+  }
+
+  async function downloadFiltered() {
+    const btn = document.getElementById('downloadAll');
+    btn.disabled = true;
+    btn.textContent = '⏳ Hazırlanıyor...';
+    try {
+      const found = scanResults.filter(r => r.outputPages && r.outputPages.length > 0);
+      if (found.length === 0) return;
+
+      const allPages = [...new Set(found.flatMap(r => r.outputPages))].sort((a,b) => a-b);
+
+      const { PDFDocument } = getPDFLib();
+      // Her seferinde orijinal buffer'ın taze kopyasını kullan
+      const srcDoc = await PDFDocument.load(pdfArrayBuffer.slice(0), { ignoreEncryption: true });
+      const newDoc = await PDFDocument.create();
+
+      const pageIndices = allPages.map(p => p - 1);
+      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+      for (const pg of copiedPages) newDoc.addPage(pg);
+
+      const outBytes = await newDoc.save();
+      downloadBytes(outBytes, 'filtrelenmis_faturalar.pdf');
+    } catch(e) {
+      alert('İndirme hatası: ' + e.message);
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⬇️ Filtrelenmiş PDF İndir';
+    }
+  }
+
+  async function downloadSeparate() {
+    const btn = document.getElementById('downloadSeparate');
+    btn.disabled = true;
+    try {
+      const found = scanResults.filter(r => r.outputPages && r.outputPages.length > 0);
+      if (found.length === 0) return;
+
+      const { PDFDocument } = getPDFLib();
+      // Tüm ayrı indirmeler için tek bir srcDoc yükle (taze kopya)
+      const srcDoc = await PDFDocument.load(pdfArrayBuffer.slice(0), { ignoreEncryption: true });
+
+      for (let i = 0; i < found.length; i++) {
+        const result = found[i];
+        btn.textContent = `⏳ ${i+1}/${found.length} indiriliyor...`;
+        const newDoc = await PDFDocument.create();
+        const pageIndices = result.outputPages.map(p => p - 1);
+        const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+        for (const pg of copiedPages) newDoc.addPage(pg);
+        const outBytes = await newDoc.save();
+        const safeName = result.id.replace(/[^a-zA-Z0-9\-_]/g, '_');
+        downloadBytes(outBytes, `${safeName}.pdf`);
+        await new Promise(r => setTimeout(r, 400));
+      }
+    } catch(e) {
+      alert('İndirme hatası: ' + e.message);
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📦 Her Fatura Ayrı İndir';
+    }
+  }
+
+  function downloadBytes(bytes, filename) {
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 2000);
+  }
+</script>
+</body>
+</html>
