@@ -3,11 +3,12 @@
 Split any PDF by invoice number and download them separately or as one file.
 
 ## What it does
-Upload a complex PDF containing multiple invoices — Invoice Splitter automatically detects and separates them by invoice number. You can then download each invoice individually or all of them as a single merged PDF.
+Upload a complex PDF containing multiple invoices, then enter the invoice numbers you want to extract — one per line. Invoice Splitter finds and pulls exactly those pages from the PDF. You can download each invoice individually or all of them as a single merged PDF.
 
 ## Features
 - 📂 Upload any PDF file
-- 🔍 Auto-detects invoice numbers
+- ✍️ Enter one or multiple invoice numbers manually
+- 🔍 Extracts only the pages you need
 - 📥 Download invoices one by one
 - 📦 Bulk download as a single PDF
 - 🌐 Works entirely in your browser — no installation needed
@@ -15,7 +16,7 @@ Upload a complex PDF containing multiple invoices — Invoice Splitter automatic
 ## How to use
 1. Open `index.html` in your browser
 2. Upload your PDF
-3. Select the invoices you want
+3. Enter the invoice numbers you want to extract (one per line)
 4. Download individually or all at once
 
 ## No installation required
